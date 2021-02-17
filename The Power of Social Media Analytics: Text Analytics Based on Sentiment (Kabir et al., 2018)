@@ -1,0 +1,148 @@
+# debugging setting
+debug <- TRUE
+# install required packages
+> if(!require('twitteR')) install.packages('twitteR')
+> if(!require('ROAuth')) install.packages('ROAuth')
+> if(!require('plyr')) install.packages('plyr')
+> if(!require('dplyr')) install.packages('dplyr')
+> if(!require('stringr')) install.packages('stringr')
+> if(!require('ggplot2')) install.packages('ggplot2')
+> if(!require('tm')) install.packages('tm')
+# connect all libraries
+> library(tm)
+> library(twitteR)
+> library(ROAuth)
+> library(plyr)
+> library(dplyr)
+> library(stringr)
+> library(ggplot2)
+# Twitter developer account authentication
+> api_key <- "XXXXXX"
+> api_secret <- "XXXXXXXXXX"
+> access_token <- "XXXXXXXXXXX"
+> access_token_secret <- "XXXXXXXXXXXX"
+> setup_twitter_oauth(api_key,api_secret,access_token,access_token_secret)
+# the function of tweets accessing and analyzing
+> search <- ("sajeebwazed")
+# access tweets and create cumulative file
+> if(isTRUE(debug)) print("Fetching tweets...")
+> list <- searchTwitter("sajeebwazed", n=700)
+> if(isTRUE(debug)) print("Done.")
+# creating dataframe
+> if(isTRUE(debug)) print("Creating stack file...")
+> df <- twListToDF(list)
+> df <- df[, order(names(df))]
+> df$created <- strftime(df$created, '%Y-%m-%d')
+> if (file.exists(paste("sajeebwazed",'_stack.csv'))==FALSE) write.csv(df,
+file=paste("sajeebwazed",'_stack.csv'), row.names=F)
+> if(isTRUE(debug)) print("Done.")
+# merge last access with cumulative file and remove duplicates
+> if(isTRUE(debug)) print("Merging stack file...")
+> stack <- read.csv(file=paste("sajeebwazed",'_stack.csv'))
+> stack <- rbind(stack, df)
+> stack <- subset(stack, !duplicated(stack$text))
+> write.csv(stack, file=paste("sajeebwazed",'_stack.csv'), row.names=F)
+> if(isTRUE(debug)) print("Done.")
+# evaluation tweets function
+> score.sentiment <- function(sentences, pos.words, neg.words, .progress='none')
++ {
++ require(plyr)
++ require(stringr)
++ scores <- laply(sentences, function(sentence, pos.words, neg.words){
++ sentence <- gsub('[[:punct:]]', "", sentence)
++ sentence <- gsub('[[:cntrl:]]', "", sentence)
++ sentence <- gsub('\\d+', "", sentence)
++ sentence <- tolower(sentence)
++ word.list <- str_split(sentence, '\\s+')
++ words <- unlist(word.list)
++ pos.matches <- match(words, pos.words)
++ neg.matches <- match(words, neg.words)
++ pos.matches <- !is.na(pos.matches)
++ neg.matches <- !is.na(neg.matches)
++ score <- sum(pos.matches) - sum(neg.matches)
++ return(score)
++ }, pos.words, neg.words, .progress=.progress)
++ scores.df <- data.frame(score=scores, text=sentences)
++ return(scores.df)
++ }
+# creating scores file
+> if(isTRUE(debug)) print("Creating scores file...")
+> pos <- scan('positive-words.txt', what='character', comment.char=';') # folder with
+positive dictionary
+> neg <- scan('negative-words.txt', what='character', comment.char=';') # folder with
+negative dictionary
+> pos.words <- c(pos, 'upgrade')
+> neg.words <- c(neg, 'wtf', 'wait', 'waiting', 'epicfail')
+> Dataset <- stack 
+> Dataset$text <- as.factor(Dataset$text)
+> scores <- score.sentiment(Dataset$text, pos.words, neg.words, .progress='text')
+> write.csv(scores, file=paste("sajeebwazed",'_scores.csv'), row.names=TRUE) # save
+evaluation results into the file
+> if(isTRUE(debug)) print("Creating stack file...")
+# total evaluation: positive / negative / neutral
+> if(isTRUE(debug)) print("Performing Sentiment Analysis...")
+> stat <- scores
+> stat$created <- stack$created
+> stat$created <- as.Date(stat$created)
+> stat <- mutate(stat, tweet=ifelse(stat$score > 0, 'positive', ifelse(stat$score <
+0, 'negative', 'neutral')))
+> by.tweet <- group_by(stat, tweet, created)
+> by.tweet <- summarise(by.tweet, number=n())
+> write.csv(by.tweet, file=paste("sajeebwazed",'_opin.csv'), row.names=TRUE)
+> if(isTRUE(debug)) print("Done.")
+# create chart
+> if(isTRUE(debug)) print("Creating chart/plot...")
+> ggplot(by.tweet, aes(created, number)) + geom_line(aes(group=tweet, color=tweet),
+size=2) +
++ geom_point(aes(group=tweet, color=tweet), size=4) +
++ theme(text = element_text(size=18), axis.text.x = element_text(angle=90,
+vjust=1)) +
++ # stat_summary(fun.y = 'sum', fun.ymin='sum', fun.ymax='sum', colour = 'yellow',
+size=2, geom = 'line') +
++ ggtitle("sajeebwazed")
+> ggsave(file=paste("sajeebwazed",'_plot.jpeg'))
+> if(isTRUE(debug)) print("Done.")
+
+They cultivated and nurtured different source codes from GitHub, r-bloggers, and stackoverflow in order to create the word cloud using R
+
+# installing packages
+install.packages("tm")
+install.packages("twitteR")
+install.packages("ROAuth")
+install.packages("wordcloud")
+# importing installed libraries
+library(tm)
+library("twitteR")
+library("ROAuth")
+library(wordcloud)
+# Twitter developer account authentication
+> api_key <- "XXXXXX"
+> api_secret <- "XXXXXXXXXX"
+> access_token <- "XXXXXXXXXXX"
+> access_token_secret <- "XXXXXXXXXXXX"
+> setup_twitter_oauth(api_key,api_secret,access_token,access_token_secret)
+# storing tweets
+getTweets<-userTimeline("albd1971",n=200)
+# displaying tweets
+head(getTweets)
+# transform tweets to data frame
+df<-do.call("rbind",lapply(getTweets,as.data.frame))
+# build a corpus
+myCorpus<-Corpus(VectorSource(df$text))
+# using tm to remove unwanted data
+myCorpus <- Corpus(VectorSource(myCorpus))
+myCorpus <- tm_map(myCorpus,removePunctuation)
+myCorpus <- tm_map(myCorpus,removeNumbers)
+myCorpus <- tm_map(myCorpus, PlainTextDocument)
+myCorpus <- tm_map(myCorpus,tolower)
+myStopwords <- c(stopwords('english'))
+myCorpus <- tm_map(myCorpus,removeWords,myStopwords)
+myCorpus <- Corpus(VectorSource(myCorpus))
+myTdm <- TermDocumentMatrix( myCorpus,control=list( wordLengths = c(1,Inf) ) )
+findFreqTerms(myTdm, lowfreq=20)
+# Word Cloud
+m<-as.matrix(myTdm)
+wordFreq<-sort(rowSums(m),decreasing=TRUE)
+set.seed(375)
+grayLevels<-gray((wordFreq+10)/(max(wordFreq)+10))
+wordcloud(words=names(wordFreq),freq=wordFreq,min.freq=3,random.order=F,colors=grayLevels) 
